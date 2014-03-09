@@ -67,7 +67,7 @@ miaou.video = function(otherUserId) {
 
 		pc.onicecandidate = function(e) {
 			if (e.candidate) {
-				miaou.socket.emit('video', JSON.stringify({
+				miaou.socket.emit('video:addCandidate', JSON.stringify({
 					otherUserId: otherUserId,
 					candidate: e.candidate
 				}));
@@ -98,34 +98,35 @@ miaou.video = function(otherUserId) {
 
 	function localDescCreated(desc) {
 		pc.setLocalDescription(desc, function () {
-			miaou.socket.emit(JSON.stringify({
+			miaou.socket.emit('video:offer', JSON.stringify({
 				otherUserId: otherUserId,
 				sdp: pc.localDescription
 			}));
 		}, logError);
 	}
 
-	miaou.socket.on('video', function (evt) {
+	miaou.socket.on('video:addCandidate', function(data) {
 		if (!pc) {
 			start();
 		}
 
-		var message = JSON.parse(evt.data);
-		if (message.sdp) {
-			pc.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
+		data = JSON.parse(data);
+		pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+	});
+
+	miaou.socket.on('video:offer', function(data) {
+		data = JSON.parse(data);
+		pc.setRemoteDescription(new RTCSessionDescription(data.sdp), function() {
 			// if we received an offer, we need to answer
 			if (pc.remoteDescription.type == 'offer')
 				pc.createAnswer(localDescCreated, logError);
-			}, logError);
-		}
-		else {
-			pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-		}
+		}, logError);
 	});
 
 	function logError(error) {
 		log(error.name + ': ' + error.message);
 	}
+
 	return {
 		start: start,
 	}

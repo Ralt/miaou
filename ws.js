@@ -100,8 +100,9 @@ function handleUserInRoom(socket, completeUser, db){
 		console.log('ERR', err, 'for user', completeUser.name, 'in room', (room||{}).name);
 		socket.emit('error', err.toString());
 	}
+
 	var room, lastMessageTime,
-		publicUser = {id:completeUser.id, name:completeUser.name};
+		publicUser = {id:completeUser.id, name:completeUser.name, socketId: socket.id};
 	socket.set('publicUser', publicUser);
 
 	socket.on('request', function(roomId){
@@ -279,8 +280,16 @@ function handleUserInRoom(socket, completeUser, db){
 			reply(lounge.id)
 		}).catch(function(err){ console.log('ERR in PM :', err) })	
 		.finally(db.off);
-	}).on('video', function(obj) {
-		console.log(obj);
+	}).on('video:addCandidate', function(obj) {
+		obj = JSON.parse(obj);
+		getSocketByUserId(room.id, obj.otherUserId, function(otherUserSocketId) {
+			io.sockets.socket(otherUserSocketId).emit('video:addCandidate', obj);
+		});
+	}).on('video:offer', function(obj) {
+		obj = JSON.parse(obj);
+		getSocketByUserId(room.id, obj.otherUserId, function(otherUserSocketId) {
+			io.sockets.socket(otherUserSocketId).emit('video:offer', obj);
+		});
 	}).on('disconnect', function(){ // todo : are we really assured to get this event which is used to clear things ?
 		if (room) {
 			console.log(completeUser.name, "leaves room", room.id, ':', room.name);
@@ -292,6 +301,21 @@ function handleUserInRoom(socket, completeUser, db){
 	});
 	
 	socket.emit('ready');
+}
+
+function getSocketByUserId(roomId, userId, cb) {
+	var clients = io.sockets.clients(roomId);
+	clients.forEach(function(client) {
+		client.get('publicUser', function(err, user) {
+			if (user.id === userId) cb(user.socketId);
+		});
+	});
+}
+
+function getSocketById(clients, socketId) {
+	for (var i = 0; i < clients.length; i++) {
+		if (clients[i].id === socketId) return clients[i];
+	}
 }
 
 exports.listen = function(server, sessionStore, cookieParser, db){
