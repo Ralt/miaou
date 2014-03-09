@@ -280,6 +280,7 @@ function handleUserInRoom(socket, completeUser, db){
 		}).catch(function(err){ console.log('ERR in PM :', err) })	
 		.finally(db.off);
 	}).on('video', function(obj) {
+		console.log(obj);
 	}).on('disconnect', function(){ // todo : are we really assured to get this event which is used to clear things ?
 		if (room) {
 			console.log(completeUser.name, "leaves room", room.id, ':', room.name);

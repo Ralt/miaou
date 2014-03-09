@@ -60,6 +60,7 @@ miaou.video = function(otherUserId) {
 	var pc;
 	var RTCPeerConnection = miaou.video.RTCPeerConnection();
 	var selfView = document.getElementById('selfView');
+	var remoteView = document.getElementById('remoteView');
 
 	function start() {
 		pc = new RTCPeerConnection(conf);
@@ -105,19 +106,21 @@ miaou.video = function(otherUserId) {
 	}
 
 	miaou.socket.on('video', function (evt) {
-		if (!pc)
+		if (!pc) {
 			start();
+		}
 
 		var message = JSON.parse(evt.data);
-		if (message.sdp)
+		if (message.sdp) {
 			pc.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
 			// if we received an offer, we need to answer
 			if (pc.remoteDescription.type == 'offer')
 				pc.createAnswer(localDescCreated, logError);
 			}, logError);
-		else
+		}
+		else {
 			pc.addIceCandidate(new RTCIceCandidate(message.candidate));
-		};
+		}
 	});
 
 	function logError(error) {
