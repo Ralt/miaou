@@ -47,6 +47,95 @@ miaou.getMessages = function(){
 	return $('#messages .message').map(function(){ return $(this).data('message') }).get();
 }
 
+navigator.getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+miaou.video = {};
+
+miaou.video = function(otherUserId) {
+	var conf = {
+		iceServers: [{
+			url: 'stun:stun.l.google.com:19302'
+		}]
+	};
+	var pc;
+	var RTCPeerConnection = miaou.video.RTCPeerConnection();
+	var selfView = document.getElementById('selfView');
+
+	function start() {
+		pc = new RTCPeerConnection(conf);
+
+		pc.onicecandidate = function(e) {
+			if (e.candidate) {
+				miaou.socket.emit('video', JSON.stringify({
+					otherUserId: otherUserId,
+					candidate: e.candidate
+				}));
+			}
+		};
+
+		// let the 'negotiationneeded' event trigger offer generation
+		pc.onnegotiationneeded = function () {
+			pc.createOffer(localDescCreated, logError);
+		}
+
+		// once remote stream arrives, show it in the remote video element
+		pc.onaddstream = function (evt) {
+			remoteView.src = URL.createObjectURL(evt.stream);
+			remoteView.play();
+		};
+
+		// get a local stream, show it in a self-view and add it to be sent
+		navigator.getUserMedia({
+			'audio': true,
+			'video': true
+		}, function (stream) {
+			selfView.src = URL.createObjectURL(stream);
+			selfView.play();
+			pc.addStream(stream);
+		}, logError);
+	}
+
+	function localDescCreated(desc) {
+		pc.setLocalDescription(desc, function () {
+			miaou.socket.emit(JSON.stringify({
+				otherUserId: otherUserId,
+				sdp: pc.localDescription
+			}));
+		}, logError);
+	}
+
+	miaou.socket.on('video', function (evt) {
+		if (!pc)
+			start();
+
+		var message = JSON.parse(evt.data);
+		if (message.sdp)
+			pc.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
+			// if we received an offer, we need to answer
+			if (pc.remoteDescription.type == 'offer')
+				pc.createAnswer(localDescCreated, logError);
+			}, logError);
+		else
+			pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+		};
+	});
+
+	function logError(error) {
+		log(error.name + ': ' + error.message);
+	}
+	return {
+		start: start,
+	}
+};
+
+miaou.video.RTCPeerConnection = function() {
+	return window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+};
+
+miaou.video.webRTCSupported = function() {
+	return !!miaou.video.RTCPeerConnection();
+};
+
 miaou.MAX_AGE_FOR_EDIT = 5000; // seconds (should be coherent with server settings)
 miaou.DELAY_BEFORE_PROFILE_POPUP = 300; // ms
 
@@ -324,11 +413,21 @@ miaou.chat = function(){
 			miaou.socket.emit('pm', user.id, function(roomId){
 				win.location = roomId;
 				//win.focus();
-			});			
+			});
 		}).appendTo(this);
+		if (miaou.video.webRTCSupported()) {
+			$('<button>')
+				.addClass('videoButton')
+				.text('video')
+				.on('click', function() {
+					miaou.video(user.id).start();
+				})
+				.appendTo(this);
+		}
 	}
+
 	function hideUserHoverButtons(){
-		$('.pingButton,.pmButton').remove();
+		$('.pingButton,.pmButton,.videoButton').remove();
 	}
 	
 	$(function(){
